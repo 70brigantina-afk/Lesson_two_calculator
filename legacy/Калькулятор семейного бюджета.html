@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<!--
+================================================================================
+  КАЛЬКУЛЯТОР СЕМЕЙНОГО БЮДЖЕТА
+================================================================================
+  Версия: 1.0
+  Язык:   HTML + CSS + JavaScript (один файл, без внешних библиотек)
+
+  НАЗНАЧЕНИЕ:
+  Учёт доходов, расходов, долгов и накоплений семьи за выбранный месяц.
+  Данные сохраняются в браузере (localStorage) и не пропадают после перезагрузки.
+
+  ВОЗМОЖНОСТИ:
+  • Выбор месяца и остаток на начало периода
+  • 4 типа операций: доход, расход, долг/кредит, накопления
+  • Категории, счета, комментарии к каждой записи
+  • Сводная статистика и баланс месяца
+  • Расходы по категориям с процентами и прогресс-барами
+  • Статистика по банковским счетам и наличным
+  • Плановый лимит расходов (можно задать цель на месяц)
+  • Финансовые подсказки на основе ваших данных
+  • Поиск, фильтрация и сортировка истории операций
+  • Редактирование и удаление записей
+  • Экспорт в CSV (открывается в Excel) и JSON (резервная копия)
+  • Импорт резервной копии JSON
+  • Адаптивная вёрстка для телефона и планшета
+
+  КАК ИСПОЛЬЗОВАТЬ:
+  1. Скопируйте весь этот файл целиком.
+  2. Вставьте в онлайн-редактор HTML или сохраните как .html и откройте в браузере.
+  3. Выберите месяц → укажите остаток на начало → добавляйте операции.
+  4. Периодически делайте резервную копию JSON (кнопка внизу страницы).
+
+  ФОРМУЛА БАЛАНСА:
+  Баланс = Остаток на начало + Доходы − Расходы − Долги − Накопления
+
+  ХРАНЕНИЕ ДАННЫХ:
+  Ключи localStorage: familyBudgetOperations, familyBudgetBalances, familyBudgetPlan
+================================================================================
+-->
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Калькулятор семейного бюджета</title>
+
+  <!-- ===================== СТИЛИ (CSS) ===================== -->
+  <style>
+    /* --- Сброс и базовые настройки --- */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(160deg, #eef2f7 0%, #f8fafc 50%, #e8edf5 100%);
+      color: #1a1a2e;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* --- Контейнер страницы --- */
+    .container {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+    }
+
+    /* --- Заголовок и подзаголовок --- */
+    .page-header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .page-header h1 {
+      margin: 0 0 8px;
+      font-size: clamp(26px, 5vw, 40px);
+      font-weight: 700;
+    }
+
+    .page-header p {
+      margin: 0;
+      color: #5a6270;
+      font-size: 15px;
+    }
+
+    /* --- Карточки-блоки интерфейса --- */
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 22px 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+      border: 1px solid rgba(0, 0, 0, 0.04);
+    }
+
+    .card h2 {
+      margin: 0 0 16px;
+      font-size: 20px;
+      font-weight: 600;
+      color: #1a1a2e;
+    }
+
+    .card-desc {
+      margin: -8px 0 16px;
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    /* --- Строки форм (flex) --- */
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .row > * { flex: 1 1 180px; }
+
+    /* --- Поля ввода и кнопки --- */
+    input, select, button, textarea {
+      font-family: inherit;
+      font-size: 15px;
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
+    }
+
+    input, select {
+      height: 46px;
+      padding: 0 14px;
+      width: 100%;
+      background: #fff;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    button {
+      height: 46px;
+      padding: 0 18px;
+      cursor: pointer;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      white-space: nowrap;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    button:hover { background: #e5e7eb; }
+    button:active { transform: scale(0.98); }
+
+    .btn-primary {
+      background: #1e3a5f;
+      color: #fff;
+      border-color: #1e3a5f;
+    }
+
+    .btn-primary:hover { background: #2d4a6f; }
+
+    .btn-danger {
+      background: #fef2f2;
+      color: #b91c1c;
+      border-color: #fecaca;
+    }
+
+    .btn-danger:hover { background: #fee2e2; }
+
+    .btn-edit {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-color: #bfdbfe;
+    }
+
+    .btn-edit:hover { background: #dbeafe; }
+
+    /* --- Цветовые классы для сумм --- */
+    .plus  { color: #15803d; font-weight: 600; }
+    .minus { color: #dc2626; font-weight: 600; }
+    .blue  { color: #1d4ed8; font-weight: 600; }
+    .gold  { color: #b45309; font-weight: 600; }
+
+    /* --- Сводная панель статистики (5 блоков) --- */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+    }
+
+    .summary-box {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    .summary-box b {
+      display: block;
+      margin-top: 6px;
+      font-size: 22px;
+      color: #111827;
+    }
+
+    /* --- Сетки категорий и счетов --- */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+
+    .stat-item {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 14px;
+    }
+
+    .stat-item b { font-size: 15px; }
+
+    /* --- Прогресс-бар доли категории --- */
+    .progress-bg {
+      height: 10px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .progress {
+      height: 100%;
+      background: linear-gradient(90deg, #1e3a5f, #3b82f6);
+      border-radius: 999px;
+      transition: width 0.4s ease;
+    }
+
+    .progress.over { background: linear-gradient(90deg, #b91c1c, #ef4444); }
+
+    /* --- Блок финансовой подсказки --- */
+    .advice {
+      background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+      border: 1px solid #fde68a;
+      padding: 18px 20px;
+      border-radius: 12px;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* --- Таблица операций (десктоп) --- */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 11px 10px;
+      text-align: left;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    th {
+      background: #f3f4f6;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    tr:hover td { background: #fafafa; }
+
+    /* --- Карточки операций (мобильная версия) --- */
+    .mobile-list { display: none; }
+
+    .operation-card {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+
+    .operation-card .actions {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .toolbar button, .toolbar input[type="file"] {
+      flex: 0 1 auto;
+    }
+
+    .empty-msg {
+      color: #9ca3af;
+      font-style: italic;
+      padding: 8px 0;
+    }
+
+    /* --- Подвал с документацией --- */
+    .footer-doc {
+      text-align: center;
+      font-size: 13px;
+      color: #9ca3af;
+      margin-top: 24px;
+      padding: 16px;
+    }
+
+    /* --- Адаптив: телефоны --- */
+    @media (max-width: 768px) {
+      .card { padding: 18px 16px; }
+      table { display: none; }
+      .mobile-list { display: block; }
+      .row { flex-direction: column; }
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <!-- ===================== ШАПКА ===================== -->
+  <header class="page-header">
+    <h1>Калькулятор семейного бюджета</h1>
+    <p>Учёт доходов, расходов, долгов и накоплений — всё в одном месте</p>
+  </header>
+
+  <!-- ===================== БЛОК 1: НАСТРОЙКИ МЕСЯЦА ===================== -->
+  <section class="card" aria-label="Настройки месяца">
+    <h2>Настройки месяца</h2>
+    <p class="card-desc">Выберите месяц для учёта и укажите, сколько денег было на начало периода.</p>
+    <div class="row">
+      <input type="month" id="monthFilter" title="Месяц учёта">
+      <input type="number" id="startBalance" min="0" step="1" placeholder="Остаток на начало месяца, ₽">
+      <button type="button" onclick="saveStartBalance()">Сохранить остаток</button>
+    </div>
+  </section>
+
+  <!-- ===================== БЛОК 2: ПЛАНОВЫЙ БЮДЖЕТ ===================== -->
+  <section class="card" aria-label="Плановый бюджет">
+    <h2>Плановый бюджет</h2>
+    <p class="card-desc">Задайте лимит расходов на месяц — калькулятор покажет, укладываетесь ли вы в план.</p>
+    <div class="row">
+      <input type="number" id="plannedBudget" min="0" step="1" placeholder="План расходов на месяц, ₽">
+      <button type="button" onclick="savePlannedBudget()">Сохранить план</button>
+    </div>
+    <div id="planStatus" class="advice" style="margin-top:12px; display:none;"></div>
+  </section>
+
+  <!-- ===================== БЛОК 3: ФОРМА ОПЕРАЦИИ ===================== -->
+  <section class="card" aria-label="Добавление операции">
+    <h2 id="formTitle">Добавить операцию</h2>
+    <p class="card-desc">Заполните поля и нажмите «Сохранить». Для редактирования нажмите «Изменить» в таблице ниже.</p>
+
+    <div class="row">
+      <input type="date" id="date" title="Дата операции">
+      <select id="type" title="Тип операции">
+        <option value="income">Доход</option>
+        <option value="expense">Расход</option>
+        <option value="debt">Долг / кредит</option>
+        <option value="saving">Накопления</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <!-- datalist даёт подсказки категорий при вводе -->
+      <input type="text" id="category" list="categoryHints" placeholder="Категория: зарплата, продукты, аренда…">
+      <datalist id="categoryHints">
+        <option value="Зарплата">
+        <option value="Подработка">
+        <option value="Продукты">
+        <option value="Транспорт">
+        <option value="ЖКХ">
+        <option value="Аренда">
+        <option value="Одежда">
+        <option value="Здоровье">
+        <option value="Развлечения">
+        <option value="Образование">
+        <option value="Кредит">
+        <option value="Ипотека">
+        <option value="Накопительный счёт">
+      </datalist>
+      <input type="number" id="amount" min="1" step="1" placeholder="Сумма, ₽">
+    </div>
+
+    <div class="row">
+      <select id="account" title="Счёт или кошелёк">
+        <option value="Наличные">Наличные</option>
+        <option value="Сбербанк">Сбербанк</option>
+        <option value="Т-Банк">Т-Банк</option>
+        <option value="ВТБ">ВТБ</option>
+        <option value="Альфа-Банк">Альфа-Банк</option>
+        <option value="Другое">Другое</option>
+      </select>
+      <input type="text" id="comment" placeholder="Комментарий (необязательно)">
+      <button type="button" class="btn-primary" onclick="saveOperation()">Сохранить</button>
+      <button type="button" onclick="resetForm()">Сброс</button>
+    </div>
+  </section>
+
+  <!-- ===================== БЛОК 4: СВОДНАЯ СТАТИСТИКА ===================== -->
+  <section class="card" aria-label="Статистика">
+    <h2>Статистика за месяц</h2>
+    <div class="summary">
+      <div class="summary-box">Остаток на начало<b id="startBalanceView">0 ₽</b></div>
+      <div class="summary-box">Доходы<b id="totalIncome" class="plus">0 ₽</b></div>
+      <div class="summary-box">Расходы<b id="totalExpense" class="minus">0 ₽</b></div>
+      <div class="summary-box">Долги / кредиты<b id="totalDebt" class="gold">0 ₽</b></div>
+      <div class="summary-box">Накопления<b id="totalSaving" class="blue">0 ₽</b></div>
+      <div class="summary-box">Итоговый баланс<b id="balance">0 ₽</b></div>
+    </div>
+  </section>
+
+  <!-- ===================== БЛОК 5: СЧЕТА ===================== -->
+  <section class="card" aria-label="Статистика по счетам">
+    <h2>Движение по счетам</h2>
+    <div id="accountStats" class="grid-2"></div>
+  </section>
+
+  <!-- ===================== БЛОК 6: КАТЕГОРИИ РАСХОДОВ ===================== -->
+  <section class="card" aria-label="Расходы по категориям">
+    <h2>Расходы по категориям</h2>
+    <div id="categoryStats" class="grid-2"></div>
+  </section>
+
+  <!-- ===================== БЛОК 7: ФИНАНСОВАЯ ПОДСКАЗКА ===================== -->
+  <section class="card" aria-label="Финансовая подсказка">
+    <h2>Финансовая подсказка</h2>
+    <div id="advice" class="advice">Добавьте операции — и здесь появится персональная рекомендация.</div>
+  </section>
+
+  <!-- ===================== БЛОК 8: ИСТОРИЯ ОПЕРАЦИЙ ===================== -->
+  <section class="card" aria-label="История операций">
+    <h2>История операций</h2>
+
+    <div class="row">
+      <input type="text" id="search" placeholder="Поиск: категория, счёт, комментарий, сумма" oninput="render()">
+      <select id="typeFilter" onchange="render()">
+        <option value="all">Все типы</option>
+        <option value="income">Только доходы</option>
+        <option value="expense">Только расходы</option>
+        <option value="debt">Только долги</option>
+        <option value="saving">Только накопления</option>
+      </select>
+      <select id="sortBy" onchange="render()">
+        <option value="date">Сортировка: по дате</option>
+        <option value="amount">Сортировка: по сумме</option>
+        <option value="category">Сортировка: по категории</option>
+      </select>
+    </div>
+
+    <div class="toolbar" style="margin-top:8px;">
+      <button type="button" onclick="exportCSV()">Экспорт CSV (Excel)</button>
+      <button type="button" onclick="exportJSON()">Резервная копия JSON</button>
+      <input type="file" id="importFile" accept=".json,application/json" onchange="importJSON(event)">
+      <button type="button" class="btn-danger" onclick="clearAll()">Очистить все операции</button>
+    </div>
+
+    <!-- Таблица для экранов ≥768px -->
+    <table>
+      <thead>
+        <tr>
+          <th>Дата</th>
+          <th>Тип</th>
+          <th>Категория</th>
+          <th>Сумма</th>
+          <th>Счёт</th>
+          <th>Комментарий</th>
+          <th>Действия</th>
+        </tr>
+      </thead>
+      <tbody id="operationList"></tbody>
+    </table>
+
+    <!-- Карточки для мобильных устройств -->
+    <div id="mobileList" class="mobile-list"></div>
+  </section>
+
+  <footer class="footer-doc">
+    Данные хранятся локально в вашем браузере. Регулярно сохраняйте резервную копию JSON.
+  </footer>
+
+</div>
+
+<!-- ===================== ЛОГИКА (JavaScript) ===================== -->
+<script>
+/**
+ * --------------------------------------------------------------------------
+ * ГЛОБАЛЬНОЕ СОСТОЯНИЕ ПРИЛОЖЕНИЯ
+ * --------------------------------------------------------------------------
+ * operations — массив всех операций [{ id, date, type, category, amount, account, comment }]
+ * balances   — объект { "2025-06": 50000 } — остаток на начало каждого месяца
+ * plans      — объект { "2025-06": 80000 } — плановый лимит расходов по месяцам
+ * editId     — id редактируемой операции (null = новая запись)
+ */
+let operations = JSON.parse(localStorage.getItem("familyBudgetOperations")) || [];
+let balances   = JSON.parse(localStorage.getItem("familyBudgetBalances"))   || {};
+let plans      = JSON.parse(localStorage.getItem("familyBudgetPlan"))         || {};
+let editId     = null;
+
+const today        = new Date();
+const currentMonth = today.toISOString().slice(0, 7); // формат YYYY-MM
+const currentDate  = today.toISOString().slice(0, 10); // формат YYYY-MM-DD
+
+/* Инициализация полей даты и месяца текущими значениями */
+document.getElementById("monthFilter").value = currentMonth;
+document.getElementById("date").value        = currentDate;
+
+/**
+ * Защита от XSS: экранирует спецсимволы перед вставкой в innerHTML
+ * @param {string} text — произвольный текст пользователя
+ * @returns {string}
+ */
+function escapeHTML(text) {
+  return String(text ?? "")
+    .replace(/&/g,  "&amp;")
+    .replace(/</g,  "&lt;")
+    .replace(/>/g,  "&gt;")
+    .replace(/"/g,  "&quot;")
+    .replace(/'/g,  "&#039;");
+}
+
+/**
+ * Форматирует число как российские рубли
+ * @param {number} value
+ * @returns {string} например "12 500 ₽"
+ */
+function formatRub(value) {
+  return Number(value).toLocaleString("ru-RU") + " ₽";
+}
+
+/**
+ * Форматирует дату ISO в читаемый вид
+ * @param {string} date — "2025-06-11"
+ */
+function formatDate(date) {
+  return new Date(date + "T00:00:00").toLocaleDateString("ru-RU");
+}
+
+/** Возвращает русское название типа операции */
+function getTypeName(type) {
+  const map = {
+    income:  "Доход",
+    expense: "Расход",
+    debt:    "Долг / кредит",
+    saving:  "Накопления"
+  };
+  return map[type] || type;
+}
+
+/** Сохраняет все данные в localStorage браузера */
+function saveData() {
+  localStorage.setItem("familyBudgetOperations", JSON.stringify(operations));
+  localStorage.setItem("familyBudgetBalances",   JSON.stringify(balances));
+  localStorage.setItem("familyBudgetPlan",         JSON.stringify(plans));
+}
+
+/** Возвращает выбранный месяц из поля monthFilter (YYYY-MM) */
+function getSelectedMonth() {
+  return document.getElementById("monthFilter").value;
+}
+
+/** Сохраняет остаток на начало выбранного месяца */
+function saveStartBalance() {
+  const month = getSelectedMonth();
+  balances[month] = Number(document.getElementById("startBalance").value) || 0;
+  saveData();
+  render();
+}
+
+/** Сохраняет плановый лимит расходов на месяц */
+function savePlannedBudget() {
+  const month = getSelectedMonth();
+  plans[month] = Number(document.getElementById("plannedBudget").value) || 0;
+  saveData();
+  render();
+}
+
+/**
+ * Валидация и сохранение новой или отредактированной операции
+ */
+function saveOperation() {
+  const date     = document.getElementById("date").value;
+  const type     = document.getElementById("type").value;
+  const category = document.getElementById("category").value.trim();
+  const amount   = Number(document.getElementById("amount").value);
+  const account  = document.getElementById("account").value;
+  const comment  = document.getElementById("comment").value.trim();
+
+  if (!date)              { alert("Укажите дату операции."); return; }
+  if (!category)          { alert("Укажите категорию."); return; }
+  if (!amount || amount <= 0) { alert("Укажите корректную сумму (больше 0)."); return; }
+
+  const item = {
+    id: editId || Date.now(),
+    date, type, category, amount, account, comment
+  };
+
+  if (editId) {
+    operations = operations.map(op => op.id === editId ? item : op);
+  } else {
+    operations.push(item);
+  }
+
+  saveData();
+  resetForm();
+  render();
+}
+
+/** Загружает операцию в форму для редактирования */
+function editOperation(id) {
+  const item = operations.find(op => op.id === id);
+  if (!item) return;
+
+  editId = id;
+  document.getElementById("formTitle").textContent = "Редактировать операцию";
+  document.getElementById("date").value     = item.date;
+  document.getElementById("type").value     = item.type;
+  document.getElementById("category").value = item.category;
+  document.getElementById("amount").value   = item.amount;
+  document.getElementById("account").value  = item.account;
+  document.getElementById("comment").value  = item.comment;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+/** Сбрасывает форму в режим «добавить новую операцию» */
+function resetForm() {
+  editId = null;
+  document.getElementById("formTitle").textContent = "Добавить операцию";
+  document.getElementById("date").value     = currentDate;
+  document.getElementById("type").value     = "income";
+  document.getElementById("category").value = "";
+  document.getElementById("amount").value   = "";
+  document.getElementById("account").value  = "Наличные";
+  document.getElementById("comment").value  = "";
+}
+
+/** Удаляет одну операцию по id */
+function deleteOperation(id) {
+  if (confirm("Удалить эту операцию?")) {
+    operations = operations.filter(op => op.id !== id);
+    saveData();
+    render();
+  }
+}
+
+/** Удаляет все операции (остатки и планы сохраняются) */
+function clearAll() {
+  if (confirm("Удалить ВСЕ операции? Это действие нельзя отменить.")) {
+    operations = [];
+    saveData();
+    render();
+  }
+}
+
+/**
+ * Возвращает отфильтрованный и отсортированный список операций за выбранный месяц
+ */
+function getFilteredOperations() {
+  const month      = getSelectedMonth();
+  const typeFilter = document.getElementById("typeFilter").value;
+  const search     = document.getElementById("search").value.toLowerCase().trim();
+  const sortBy     = document.getElementById("sortBy").value;
+
+  let list = operations.filter(op => op.date.slice(0, 7) === month);
+
+  if (typeFilter !== "all") {
+    list = list.filter(op => op.type === typeFilter);
+  }
+
+  if (search) {
+    list = list.filter(op =>
+      op.category.toLowerCase().includes(search) ||
+      op.account.toLowerCase().includes(search)  ||
+      String(op.amount).includes(search)         ||
+      op.comment.toLowerCase().includes(search)
+    );
+  }
+
+  list.sort((a, b) => {
+    if (sortBy === "amount")   return b.amount - a.amount;
+    if (sortBy === "category") return a.category.localeCompare(b.category, "ru");
+    return new Date(a.date) - new Date(b.date);
+  });
+
+  return list;
+}
+
+/**
+ * ГЛАВНАЯ ФУНКЦИЯ ОТРИСОВКИ
+ * Пересчитывает статистику и обновляет весь интерфейс
+ */
+function render() {
+  const month        = getSelectedMonth();
+  const startBalance = balances[month] || 0;
+  const plannedBudget = plans[month] || 0;
+  const list         = getFilteredOperations();
+
+  /* --- Заполняем поля настроек --- */
+  document.getElementById("startBalance").value   = startBalance || "";
+  document.getElementById("plannedBudget").value  = plannedBudget || "";
+  document.getElementById("startBalanceView").textContent = formatRub(startBalance);
+
+  /* --- Счётчики по типам --- */
+  let income = 0, expense = 0, debt = 0, saving = 0;
+  const categoryExpenses = {};
+  const accountStats     = {};
+
+  const tableBody  = document.getElementById("operationList");
+  const mobileList = document.getElementById("mobileList");
+  tableBody.innerHTML  = "";
+  mobileList.innerHTML = "";
+
+  list.forEach(item => {
+    if (item.type === "income")  income  += item.amount;
+    if (item.type === "expense") expense += item.amount;
+    if (item.type === "debt")    debt    += item.amount;
+    if (item.type === "saving")  saving  += item.amount;
+
+    if (item.type === "expense") {
+      categoryExpenses[item.category] = (categoryExpenses[item.category] || 0) + item.amount;
+    }
+
+    if (!accountStats[item.account]) {
+      accountStats[item.account] = { income: 0, expense: 0, debt: 0, saving: 0 };
+    }
+    accountStats[item.account][item.type] += item.amount;
+
+    const cls = item.type === "income" ? "plus"
+              : item.type === "saving" ? "blue"
+              : item.type === "debt"   ? "gold" : "minus";
+
+    /* Строка таблицы (десктоп) */
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${formatDate(item.date)}</td>
+      <td>${getTypeName(item.type)}</td>
+      <td>${escapeHTML(item.category)}</td>
+      <td class="${cls}">${formatRub(item.amount)}</td>
+      <td>${escapeHTML(item.account)}</td>
+      <td>${escapeHTML(item.comment) || "—"}</td>
+      <td>
+        <button class="btn-edit" onclick="editOperation(${item.id})">Изменить</button>
+        <button class="btn-danger" onclick="deleteOperation(${item.id})">Удалить</button>
+      </td>`;
+    tableBody.appendChild(tr);
+
+    /* Карточка (мобильный) */
+    const card = document.createElement("div");
+    card.className = "operation-card";
+    card.innerHTML = `
+      <strong class="${cls}">${formatRub(item.amount)}</strong><br>
+      ${formatDate(item.date)} · ${getTypeName(item.type)}<br>
+      Категория: ${escapeHTML(item.category)}<br>
+      Счёт: ${escapeHTML(item.account)}
+      ${item.comment ? "<br>Комментарий: " + escapeHTML(item.comment) : ""}
+      <div class="actions">
+        <button class="btn-edit" onclick="editOperation(${item.id})">Изменить</button>
+        <button class="btn-danger" onclick="deleteOperation(${item.id})">Удалить</button>
+      </div>`;
+    mobileList.appendChild(card);
+  });
+
+  if (list.length === 0) {
+    tableBody.innerHTML  = '<tr><td colspan="7" class="empty-msg">Операций за этот месяц пока нет.</td></tr>';
+    mobileList.innerHTML = '<p class="empty-msg">Операций за этот месяц пока нет.</p>';
+  }
+
+  /* --- Итоговый баланс: остаток + доходы − расходы − долги − накопления --- */
+  const balance = startBalance + income - expense - debt - saving;
+
+  document.getElementById("totalIncome").textContent  = formatRub(income);
+  document.getElementById("totalExpense").textContent = formatRub(expense);
+  document.getElementById("totalDebt").textContent    = formatRub(debt);
+  document.getElementById("totalSaving").textContent  = formatRub(saving);
+
+  const balanceEl = document.getElementById("balance");
+  balanceEl.textContent = formatRub(balance);
+  balanceEl.className   = balance >= 0 ? "plus" : "minus";
+
+  renderCategoryStats(categoryExpenses, expense);
+  renderAccountStats(accountStats);
+  renderPlanStatus(plannedBudget, expense);
+  renderAdvice(income, expense, debt, saving, balance, plannedBudget);
+}
+
+/** Отрисовка расходов по категориям с прогресс-барами */
+function renderCategoryStats(categoryExpenses, totalExpense) {
+  const block = document.getElementById("categoryStats");
+  block.innerHTML = "";
+
+  const entries = Object.entries(categoryExpenses).sort((a, b) => b[1] - a[1]);
+
+  if (entries.length === 0) {
+    block.innerHTML = '<p class="empty-msg">Расходов за месяц пока нет.</p>';
+    return;
+  }
+
+  entries.forEach(([category, amount]) => {
+    const percent = totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0;
+    const div = document.createElement("div");
+    div.className = "stat-item";
+    div.innerHTML = `
+      <b>${escapeHTML(category)}</b><br>
+      ${formatRub(amount)} · ${percent}% от всех расходов
+      <div class="progress-bg">
+        <div class="progress" style="width:${percent}%"></div>
+      </div>`;
+    block.appendChild(div);
+  });
+}
+
+/** Отрисовка движения денег по каждому счёту */
+function renderAccountStats(accountStats) {
+  const block = document.getElementById("accountStats");
+  block.innerHTML = "";
+
+  const entries = Object.entries(accountStats);
+
+  if (entries.length === 0) {
+    block.innerHTML = '<p class="empty-msg">Операций по счетам пока нет.</p>';
+    return;
+  }
+
+  entries.forEach(([account, data]) => {
+    const result = data.income - data.expense - data.debt - data.saving;
+    const div = document.createElement("div");
+    div.className = "stat-item";
+    div.innerHTML = `
+      <b>${escapeHTML(account)}</b><br>
+      Доход: <span class="plus">${formatRub(data.income)}</span><br>
+      Расход: <span class="minus">${formatRub(data.expense)}</span><br>
+      Долги: <span class="gold">${formatRub(data.debt)}</span><br>
+      Накопления: <span class="blue">${formatRub(data.saving)}</span><br>
+      Итог по счёту: <b class="${result >= 0 ? "plus" : "minus"}">${formatRub(result)}</b>`;
+    block.appendChild(div);
+  });
+}
+
+/** Показывает выполнение планового бюджета */
+function renderPlanStatus(plannedBudget, expense) {
+  const el = document.getElementById("planStatus");
+
+  if (!plannedBudget) {
+    el.style.display = "none";
+    return;
+  }
+
+  el.style.display = "block";
+  const percent = Math.min(Math.round((expense / plannedBudget) * 100), 100);
+  const over    = expense > plannedBudget;
+  const left    = plannedBudget - expense;
+
+  el.innerHTML = over
+    ? `План: <b>${formatRub(plannedBudget)}</b> — потрачено <b class="minus">${formatRub(expense)}</b>.
+       Перерасход: <b class="minus">${formatRub(expense - plannedBudget)}</b>.`
+    : `План: <b>${formatRub(plannedBudget)}</b> — потрачено <b>${formatRub(expense)}</b> (${percent}%).
+       Осталось: <b class="plus">${formatRub(left)}</b>.`;
+
+  el.innerHTML += `
+    <div class="progress-bg" style="margin-top:10px">
+      <div class="progress ${over ? "over" : ""}" style="width:${percent}%"></div>
+    </div>`;
+}
+
+/**
+ * Генерирует персональную финансовую подсказку
+ * на основе соотношения доходов, расходов и баланса
+ */
+function renderAdvice(income, expense, debt, saving, balance, plannedBudget) {
+  const advice = document.getElementById("advice");
+
+  if (income === 0 && expense === 0 && debt === 0 && saving === 0) {
+    advice.innerHTML = "Добавьте доходы и расходы — и здесь появится персональная рекомендация.";
+    return;
+  }
+
+  const totalOut   = expense + debt + saving;
+  const daysInMonth = 30;
+  const dailyLimit  = balance > 0 ? Math.floor(balance / daysInMonth) : 0;
+  const savingsRate = income > 0 ? Math.round((saving / income) * 100) : 0;
+
+  let text = "";
+
+  if (balance > 0 && totalOut <= income * 0.7) {
+    text = `Отличный результат! Бюджет устойчивый. Остаток: <b class="plus">${formatRub(balance)}</b>.`;
+    if (dailyLimit > 0) {
+      text += `<br>Можно тратить примерно <b>${formatRub(dailyLimit)}</b> в день до конца месяца.`;
+    }
+  } else if (balance > 0) {
+    text = `Бюджет в плюсе (<b class="plus">${formatRub(balance)}</b>), но расходы высокие.
+            Проверьте крупные категории — там часто «утекают» деньги.`;
+  } else {
+    text = `Бюджет в минусе на <b class="minus">${formatRub(Math.abs(balance))}</b>.
+            Сократите необязательные траты или найдите дополнительный доход.`;
+  }
+
+  if (plannedBudget && expense > plannedBudget) {
+    text += `<br><b class="minus">Внимание:</b> расходы превысили план на ${formatRub(expense - plannedBudget)}.`;
+  }
+
+  if (saving > 0 && income > 0) {
+    text += `<br>Накопления: ${savingsRate}% от дохода — ${savingsRate >= 10 ? "хороший показатель!" : "попробуйте откладывать больше 10%."}`;
+  }
+
+  advice.innerHTML = text;
+}
+
+/** Экспорт всех операций в CSV (разделитель «;» — для Excel в русской локали) */
+function exportCSV() {
+  let csv = "\uFEFFДата;Тип;Категория;Сумма;Счёт;Комментарий\n"; // BOM для корректной кодировки в Excel
+
+  operations.forEach(item => {
+    csv += `${item.date};${getTypeName(item.type)};${item.category};${item.amount};${item.account};${item.comment}\n`;
+  });
+
+  downloadFile(csv, "семейный-бюджет.csv", "text/csv;charset=utf-8");
+}
+
+/** Экспорт полной резервной копии (операции + остатки + планы) */
+function exportJSON() {
+  const data = JSON.stringify({ operations, balances, plans }, null, 2);
+  downloadFile(data, "семейный-бюджет-резерв.json", "application/json");
+}
+
+/** Импорт резервной копии из JSON-файла */
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+
+      if (!Array.isArray(data.operations)) {
+        alert("Неверный формат файла: отсутствует список операций.");
+        return;
+      }
+
+      operations = data.operations;
+      balances   = data.balances || {};
+      plans      = data.plans     || {};
+      saveData();
+      render();
+      alert("Данные успешно восстановлены из резервной копии.");
+    } catch {
+      alert("Ошибка чтения файла. Убедитесь, что это корректный JSON.");
+    }
+
+    event.target.value = "";
+  };
+
+  reader.readAsText(file);
+}
+
+/**
+ * Универсальная функция скачивания файла через временную ссылку
+ * @param {string} content  — содержимое файла
+ * @param {string} filename — имя файла
+ * @param {string} type     — MIME-тип
+ */
+function downloadFile(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* При смене месяца — перерисовываем всё */
+document.getElementById("monthFilter").addEventListener("change", render);
+
+/* Первый запуск: отрисовка интерфейса */
+render();
+</script>
+
+</body>
+</html>

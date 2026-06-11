@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
@@ -6,6 +6,78 @@
   <meta name="description" content="Семейный бюджет — простой и удобный калькулятор для учёта семейных финансов">
   <title>Семейный бюджет — учёт финансов семьи</title>
   <link rel="stylesheet" href="assets/css/landing.css">
+  <style>
+    .theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface);
+      color: var(--color-text);
+      cursor: pointer;
+      font-size: 18px;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .theme-toggle:hover { background: var(--color-bg); }
+
+    [data-theme="dark"] {
+      --color-bg: #0f1419;
+      --color-bg-gradient: linear-gradient(160deg, #0f1419 0%, #1a1f2e 50%, #0d1117 100%);
+      --color-surface: #1e2530;
+      --color-text: #e8eaed;
+      --color-text-muted: #9ca3af;
+      --color-primary: #93c5fd;
+      --color-primary-hover: #bfdbfe;
+      --color-accent: #60a5fa;
+      --color-border: #2d3748;
+      --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.35);
+    }
+
+    [data-theme="dark"] .hero-badge {
+      background: rgba(59, 130, 246, 0.15);
+      color: #93c5fd;
+    }
+
+    [data-theme="dark"] .mock-row {
+      background: #151b24;
+    }
+
+    [data-theme="dark"] .mock-row[style] {
+      background: rgba(59, 130, 246, 0.12) !important;
+      border-color: #2d4a6f !important;
+    }
+
+    [data-theme="dark"] .feature-icon {
+      background: rgba(59, 130, 246, 0.15);
+    }
+
+    [data-theme="dark"] .nav-links a:hover,
+    [data-theme="dark"] .btn-outline:hover {
+      background: #2d3748;
+    }
+
+    [data-theme="dark"] .cta-block {
+      background: #1e3a5f;
+    }
+
+    [data-theme="dark"] .cta-block .btn-primary {
+      background: #fff;
+      color: #1e3a5f;
+    }
+  </style>
+  <script>
+    (function () {
+      var saved = localStorage.getItem('theme');
+      if (saved === 'dark' || saved === 'light') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    })();
+  </script>
 </head>
 <body>
 
@@ -14,6 +86,7 @@
   <div class="nav-links">
     <a href="#features">Возможности</a>
     <a href="#how-it-works">Как начать</a>
+    <button type="button" class="theme-toggle" id="themeToggle" title="Переключить тему" aria-label="Переключить светлую и тёмную тему">🌙</button>
     <a href="app/index.html" class="btn btn-primary">Открыть калькулятор</a>
   </div>
 </nav>
@@ -136,6 +209,31 @@
     <a href="app/index.html" style="color:var(--color-accent);">Перейти к калькулятору</a>
   </p>
 </footer>
+
+<script>
+  (function () {
+    function getTheme() {
+      return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    }
+
+    function updateThemeIcon() {
+      var btn = document.getElementById('themeToggle');
+      if (btn) btn.textContent = getTheme() === 'dark' ? '☀️' : '🌙';
+    }
+
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('theme', theme);
+      updateThemeIcon();
+    }
+
+    document.getElementById('themeToggle').addEventListener('click', function () {
+      setTheme(getTheme() === 'dark' ? 'light' : 'dark');
+    });
+
+    updateThemeIcon();
+  })();
+</script>
 
 </body>
 </html>
